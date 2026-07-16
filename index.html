@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Game Hub</title>
+<style>
+  :root {
+    --bg: #1e1b2e;
+    --card: #2a2640;
+    --card-hover: #362f52;
+    --accent: #7c5cff;
+    --accent2: #40c9a2;
+    --text: #f0eefc;
+    --muted: #a89fcf;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(160deg, var(--bg), #2d2a45);
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: var(--text);
+  }
+
+  /* ---- Menu screen ---- */
+  #menu {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+  }
+  #menu h1 {
+    text-align: center;
+    font-size: 2.2rem;
+    margin-bottom: 0.25rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  #menu p.subtitle {
+    text-align: center;
+    color: var(--muted);
+    margin-top: 0;
+    margin-bottom: 2.5rem;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.25rem;
+  }
+  .game-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 1.75rem 1.25rem;
+    text-align: center;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .game-card:hover {
+    background: var(--card-hover);
+    border-color: var(--accent);
+    transform: translateY(-4px);
+  }
+  .game-card .icon {
+    font-size: 2.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .game-card h2 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+  .game-card p {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin: 0;
+  }
+  #empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 2rem;
+    display: none;
+  }
+
+  /* ---- Player screen ---- */
+  #player {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    flex-direction: column;
+  }
+  #player.active { display: flex; }
+  #player-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    background: var(--card);
+    flex-shrink: 0;
+  }
+  #back-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  #back-btn:hover { opacity: 0.9; }
+  #player-title {
+    font-weight: 600;
+  }
+  #game-frame {
+    flex: 1;
+    border: none;
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>Game Hub</h1>
+  <p class="subtitle">Pick a game to play</p>
+  <div id="grid"></div>
+  <div id="empty">No games found. Add an entry to the GAMES list in index.html.</div>
+</div>
+
+<div id="player">
+  <div id="player-bar">
+    <button id="back-btn">&larr; Back to Games</button>
+    <span id="player-title"></span>
+  </div>
+  <iframe id="game-frame"></iframe>
+</div>
+
+<script>
+  // To add a new game: create its HTML file in this folder, then add
+  // one entry here: { title, file, icon, description }.
+  const GAMES = [
+    {
+      title: "Math Blitz",
+      file: "math-game.html",
+      icon: "🧮",
+      description: "Fast-paced arithmetic challenge"
+    },
+    {
+      title: "Tic Tac Toe",
+      file: "tictactoe.html",
+      icon: "⭕",
+      description: "Classic two-player grid game"
+    }
+  ];
+
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('empty');
+  const menu = document.getElementById('menu');
+  const player = document.getElementById('player');
+  const frame = document.getElementById('game-frame');
+  const playerTitle = document.getElementById('player-title');
+  const backBtn = document.getElementById('back-btn');
+
+  if (GAMES.length === 0) {
+    empty.style.display = 'block';
+  } else {
+    GAMES.forEach(game => {
+      const card = document.createElement('div');
+      card.className = 'game-card';
+      card.innerHTML = `
+        <div class="icon">${game.icon || "🎮"}</div>
+        <h2>${game.title}</h2>
+        <p>${game.description || ""}</p>
+      `;
+      card.addEventListener('click', () => openGame(game));
+      grid.appendChild(card);
+    });
+  }
+
+  function openGame(game) {
+    frame.src = game.file;
+    playerTitle.textContent = game.title;
+    menu.style.display = 'none';
+    player.classList.add('active');
+  }
+
+  function closeGame() {
+    player.classList.remove('active');
+    menu.style.display = 'block';
+    frame.src = '';
+  }
+
+  backBtn.addEventListener('click', closeGame);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Site ID / Site Name Extractor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 780px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+    background: #fafafa;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  p.sub {
+    color: #666;
+    margin-top: 0;
+  }
+  #drop {
+    border: 2px dashed #aaa;
+    border-radius: 10px;
+    padding: 40px 20px;
+    text-align: center;
+    color: #666;
+    cursor: pointer;
+    background: #fff;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #drop.drag {
+    border-color: #4a7dff;
+    background: #eef3ff;
+  }
+  #drop input {
+    display: none;
+  }
+  #status {
+    margin: 14px 0;
+    font-size: 0.9rem;
+    color: #666;
+    min-height: 1.2em;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #888;
+    margin-bottom: 6px;
+  }
+  .card .val {
+    font-size: 1.15rem;
+    font-weight: 600;
+    word-break: break-word;
+  }
+  .card .val.empty {
+    color: #c0392b;
+    font-weight: 400;
+    font-size: 1rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #e2e2e2;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    font-size: 0.9rem;
+  }
+  th {
+    background: #f2f2f2;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #888;
+  }
+  details {
+    margin-top: 24px;
+  }
+  summary {
+    cursor: pointer;
+    color: #4a7dff;
+    font-size: 0.9rem;
+  }
+  #downloadBtn {
+    display: none;
+    margin: 4px 0 20px;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    background: #4a7dff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #downloadBtn:hover {
+    background: #3a6aef;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.8rem;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #17181c; color: #e6e6e6; }
+    p.sub { color: #999; }
+    #drop { background: #1f2025; border-color: #444; color: #aaa; }
+    #drop.drag { border-color: #6d93ff; background: #1c2333; }
+    .card, table { background: #1f2025; border-color: #333; }
+    th { background: #26272c; color: #999; }
+    td, th { border-color: #2c2d33; }
+    pre { background: #1f2025; border-color: #333; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Site ID / Site Name Extractor</h1>
+<p class="sub">Upload a PDF to pull out Site ID and Site Name values.</p>
+
+<div id="drop">
+  <div>Drag &amp; drop a PDF here, or click to choose a file</div>
+  <input type="file" id="file" accept="application/pdf" />
+</div>
+
+<div id="status"></div>
+
+<div id="results" style="display:none">
+  <div class="cards" id="singleCards"></div>
+  <table id="table" style="display:none">
+    <thead><tr><th>Site ID</th><th>Site Name</th></tr></thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <button id="downloadBtn">Download CSV</button>
+  <details>
+    <summary>Show extracted raw text</summary>
+    <pre id="rawText"></pre>
+  </details>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file");
+const statusEl = document.getElementById("status");
+const results = document.getElementById("results");
+const singleCards = document.getElementById("singleCards");
+const table = document.getElementById("table");
+const tableBody = document.getElementById("tableBody");
+const rawTextEl = document.getElementById("rawText");
+const downloadBtn = document.getElementById("downloadBtn");
+
+let lastPairs = [];
+let lastFileName = "";
+
+downloadBtn.addEventListener("click", downloadCsv);
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("drag"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("drag");
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", (e) => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+async function handleFile(file) {
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    statusEl.textContent = "Please choose a PDF file.";
+    return;
+  }
+  statusEl.textContent = `Reading ${file.name}...`;
+  results.style.display = "none";
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      statusEl.textContent = `Extracting text — page ${i} of ${pdf.numPages}...`;
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(it => it.str).join(" ");
+      fullText += pageText + "\n";
+    }
+
+    rawTextEl.textContent = fullText.trim() || "(no extractable text found — the PDF may be scanned/image-based)";
+
+    const matches = extractSitePairs(fullText);
+    renderResults(matches, file.name);
+    statusEl.textContent = `Done — ${pdf.numPages} page${pdf.numPages === 1 ? "" : "s"} processed.`;
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Error reading PDF: " + err.message;
+  }
+}
+
+// Matches labels like "Site ID", "SiteID", "Site No", "Site #" and "Site Name"
+// followed by ":", "-", "=" or whitespace, then the value up to the next
+// label or line break.
+function extractSitePairs(text) {
+  const idRe = /Site\s*(?:ID|No\.?|Number|#)\s*[:\-=]?\s*([A-Za-z0-9][A-Za-z0-9\-_\/]*)/gi;
+  const nameRe = /Site\s*Name\s*[:\-=]?\s*([^\n\r]+?)(?=(?:\s{2,}|\t|Site\s*(?:ID|No\.?|Number|#|Name)|$))/gi;
+
+  const ids = [...text.matchAll(idRe)].map(m => ({ index: m.index, value: m[1].trim() }));
+  const names = [...text.matchAll(nameRe)].map(m => ({ index: m.index, value: m[1].trim() }));
+
+  if (!ids.length && !names.length) return [];
+
+  // Pair each ID with the nearest following (or same-position) Name.
+  const pairs = [];
+  const usedNames = new Set();
+  ids.forEach(id => {
+    let best = null;
+    let bestDist = Infinity;
+    names.forEach((n, ni) => {
+      if (usedNames.has(ni)) return;
+      const dist = Math.abs(n.index - id.index);
+      if (dist < bestDist) { bestDist = dist; best = ni; }
+    });
+    if (best !== null && bestDist < 300) {
+      usedNames.add(best);
+      pairs.push({ siteId: id.value, siteName: names[best].value });
+    } else {
+      pairs.push({ siteId: id.value, siteName: "" });
+    }
+  });
+  names.forEach((n, ni) => {
+    if (!usedNames.has(ni)) pairs.push({ siteId: "", siteName: n.value });
+  });
+
+  return pairs;
+}
+
+function renderResults(pairs, fileName) {
+  results.style.display = "block";
+  singleCards.innerHTML = "";
+  table.style.display = "none";
+  tableBody.innerHTML = "";
+  downloadBtn.style.display = "none";
+
+  lastPairs = pairs;
+  lastFileName = fileName;
+
+  if (pairs.length === 0) {
+    singleCards.innerHTML = `<div class="card" style="grid-column:1/-1"><label>Result</label><div class="val empty">No "Site ID" / "Site Name" labels found in ${fileName}. Check the raw text below to see how they're actually labeled.</div></div>`;
+    return;
+  }
+
+  downloadBtn.style.display = "inline-block";
+
+  if (pairs.length === 1) {
+    const p = pairs[0];
+    singleCards.innerHTML = `
+      <div class="card">
+        <label>Site ID</label>
+        <div class="val ${p.siteId ? "" : "empty"}">${escapeHtml(p.siteId || "not found")}</div>
+      </div>
+      <div class="card">
+        <label>Site Name</label>
+        <div class="val ${p.siteName ? "" : "empty"}">${escapeHtml(p.siteName || "not found")}</div>
+      </div>`;
+  } else {
+    singleCards.innerHTML = `<div class="card" style="grid-column:1/-1"><label>Result</label><div class="val">${pairs.length} site entries found</div></div>`;
+    table.style.display = "table";
+    pairs.forEach(p => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${escapeHtml(p.siteId || "—")}</td><td>${escapeHtml(p.siteName || "—")}</td>`;
+      tableBody.appendChild(tr);
+    });
+  }
+}
+
+function csvField(value) {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadCsv() {
+  if (!lastPairs.length) return;
+
+  const rows = [["Site ID", "Site Name"]];
+  lastPairs.forEach(p => rows.push([p.siteId || "", p.siteName || ""]));
+  const csv = rows.map(r => r.map(csvField).join(",")).join("\r\n");
+
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const baseName = lastFileName.replace(/\.pdf$/i, "") || "sites";
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${baseName}_sites.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+</script>
+</body>
+</html>

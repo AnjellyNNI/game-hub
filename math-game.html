@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Math Blitz</title>
+<style>
+  :root {
+    --bg: #1e1b2e;
+    --card: #2a2640;
+    --accent: #7c5cff;
+    --accent2: #40c9a2;
+    --text: #f0eefc;
+    --wrong: #ff5c7c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, var(--bg), #2d2a45);
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: var(--text);
+  }
+  .card {
+    background: var(--card);
+    border-radius: 20px;
+    padding: 2.5rem 2rem;
+    width: 380px;
+    max-width: 90vw;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    text-align: center;
+  }
+  h1 {
+    margin: 0 0 1rem;
+    font-size: 1.8rem;
+    letter-spacing: 1px;
+  }
+  .stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    color: #cfc9ea;
+    margin-bottom: 1.5rem;
+  }
+  .stats span b {
+    color: var(--accent2);
+    font-size: 1.2rem;
+    display: block;
+  }
+  #question {
+    font-size: 2.4rem;
+    font-weight: bold;
+    margin-bottom: 1.5rem;
+    min-height: 3rem;
+  }
+  #answer {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1.4rem;
+    text-align: center;
+    border-radius: 12px;
+    border: 2px solid #453f66;
+    background: #201c33;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #answer:focus { border-color: var(--accent); }
+  #answer.wrong { border-color: var(--wrong); animation: shake 0.3s; }
+  @keyframes shake {
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+  button {
+    margin-top: 1.2rem;
+    width: 100%;
+    padding: 0.9rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.2s;
+  }
+  button:hover { background: #6a4be0; }
+  button:active { transform: scale(0.97); }
+  #feedback {
+    margin-top: 0.8rem;
+    min-height: 1.2rem;
+    font-size: 0.95rem;
+  }
+  .hidden { display: none; }
+  select {
+    margin: 0.5rem 0 1.2rem;
+    padding: 0.5rem;
+    border-radius: 8px;
+    border: none;
+    background: #201c33;
+    color: var(--text);
+    font-size: 1rem;
+  }
+  .final {
+    font-size: 2.5rem;
+    color: var(--accent2);
+    margin: 0.5rem 0;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>⚡ Math Blitz</h1>
+
+    <div id="startScreen">
+      <p>Solve as many problems as you can in 30 seconds.</p>
+      <div>
+        <label for="difficulty">Difficulty</label><br>
+        <select id="difficulty">
+          <option value="easy">Easy (1-10)</option>
+          <option value="medium" selected>Medium (1-25)</option>
+          <option value="hard">Hard (1-100)</option>
+        </select>
+      </div>
+      <button id="startBtn">Start Game</button>
+    </div>
+
+    <div id="gameScreen" class="hidden">
+      <div class="stats">
+        <span>Score<b id="score">0</b></span>
+        <span>Streak<b id="streak">0</b></span>
+        <span>Time<b id="time">30</b></span>
+      </div>
+      <div id="question">?</div>
+      <input id="answer" type="number" placeholder="Your answer" autocomplete="off">
+      <button id="submitBtn">Submit</button>
+      <div id="feedback"></div>
+    </div>
+
+    <div id="overScreen" class="hidden">
+      <p>Time's up!</p>
+      <div class="final" id="finalScore">0</div>
+      <p id="finalDetail"></p>
+      <button id="restartBtn">Play Again</button>
+    </div>
+  </div>
+
+<script>
+  const startScreen = document.getElementById('startScreen');
+  const gameScreen = document.getElementById('gameScreen');
+  const overScreen = document.getElementById('overScreen');
+  const startBtn = document.getElementById('startBtn');
+  const submitBtn = document.getElementById('submitBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const answerInput = document.getElementById('answer');
+  const questionEl = document.getElementById('question');
+  const scoreEl = document.getElementById('score');
+  const streakEl = document.getElementById('streak');
+  const timeEl = document.getElementById('time');
+  const feedbackEl = document.getElementById('feedback');
+  const finalScoreEl = document.getElementById('finalScore');
+  const finalDetailEl = document.getElementById('finalDetail');
+  const difficultySel = document.getElementById('difficulty');
+
+  const RANGES = { easy: 10, medium: 25, hard: 100 };
+  const OPS = ['+', '-', '×'];
+
+  let score = 0;
+  let streak = 0;
+  let best = 0;
+  let timeLeft = 30;
+  let timer = null;
+  let currentAnswer = 0;
+  let range = 25;
+
+  function rand(max) { return Math.floor(Math.random() * max) + 1; }
+
+  function newQuestion() {
+    const op = OPS[Math.floor(Math.random() * OPS.length)];
+    let a = rand(range);
+    let b = rand(range);
+    if (op === '-' && b > a) [a, b] = [b, a];
+    if (op === '×') { a = rand(Math.min(range, 12)); b = rand(Math.min(range, 12)); }
+
+    if (op === '+') currentAnswer = a + b;
+    else if (op === '-') currentAnswer = a - b;
+    else currentAnswer = a * b;
+
+    questionEl.textContent = `${a} ${op} ${b}`;
+    answerInput.value = '';
+    answerInput.classList.remove('wrong');
+    feedbackEl.textContent = '';
+  }
+
+  function checkAnswer() {
+    if (answerInput.value === '') return;
+    const val = parseInt(answerInput.value, 10);
+    if (val === currentAnswer) {
+      score += 1 + Math.floor(streak / 5);
+      streak++;
+      feedbackEl.textContent = '✅ Correct!';
+      feedbackEl.style.color = 'var(--accent2)';
+      scoreEl.textContent = score;
+      streakEl.textContent = streak;
+      newQuestion();
+    } else {
+      streak = 0;
+      streakEl.textContent = streak;
+      feedbackEl.textContent = `❌ Answer was ${currentAnswer}`;
+      feedbackEl.style.color = 'var(--wrong)';
+      answerInput.classList.add('wrong');
+      newQuestion();
+    }
+    answerInput.focus();
+  }
+
+  function tick() {
+    timeLeft--;
+    timeEl.textContent = timeLeft;
+    if (timeLeft <= 0) endGame();
+  }
+
+  function startGame() {
+    range = RANGES[difficultySel.value];
+    score = 0;
+    streak = 0;
+    timeLeft = 30;
+    scoreEl.textContent = 0;
+    streakEl.textContent = 0;
+    timeEl.textContent = 30;
+
+    startScreen.classList.add('hidden');
+    overScreen.classList.add('hidden');
+    gameScreen.classList.remove('hidden');
+
+    newQuestion();
+    answerInput.focus();
+    timer = setInterval(tick, 1000);
+  }
+
+  function endGame() {
+    clearInterval(timer);
+    gameScreen.classList.add('hidden');
+    overScreen.classList.remove('hidden');
+    best = Math.max(best, score);
+    finalScoreEl.textContent = score;
+    finalDetailEl.textContent = `Best score this session: ${best}`;
+  }
+
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', startGame);
+  submitBtn.addEventListener('click', checkAnswer);
+  answerInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') checkAnswer();
+  });
+</script>
+</body>
+</html>
