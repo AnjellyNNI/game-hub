@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Game Hub</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --bg: #1e1b2e;
@@ -22,12 +23,73 @@
     color: var(--text);
   }
 
+  /* ---- Sign-in screen ---- */
+  #signin-screen {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem;
+    text-align: center;
+  }
+  #signin-screen h1 {
+    font-size: 2.2rem;
+    margin-bottom: 0.25rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  #signin-screen p {
+    color: var(--muted);
+    margin-bottom: 2rem;
+  }
+  #g_id_signin_container {
+    display: flex;
+    justify-content: center;
+  }
+  #signin-config-warning {
+    display: none;
+    background: var(--card);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: left;
+  }
+
   /* ---- Menu screen ---- */
   #menu {
+    display: none;
     max-width: 900px;
     margin: 0 auto;
-    padding: 3rem 1.5rem;
+    padding: 1.5rem;
   }
+  #user-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    margin-bottom: 1.5rem;
+  }
+  #user-bar img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+  }
+  #user-bar .user-name {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  #sign-out-btn {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  #sign-out-btn:hover { color: var(--text); border-color: var(--text); }
   #menu h1 {
     text-align: center;
     font-size: 2.2rem;
@@ -73,7 +135,11 @@
   .game-card p {
     font-size: 0.9rem;
     color: var(--muted);
-    margin: 0;
+    margin: 0 0 0.5rem;
+  }
+  .game-card .stats {
+    font-size: 0.75rem;
+    color: var(--accent2);
   }
   #empty {
     text-align: center;
@@ -121,7 +187,25 @@
 </head>
 <body>
 
+<div id="signin-screen">
+  <h1>Game Hub</h1>
+  <p>Sign in with Google to play</p>
+  <div id="g_id_signin_container"></div>
+  <div id="signin-config-warning">
+    <strong>Google sign-in isn't configured yet.</strong><br>
+    Set <code>GOOGLE_CLIENT_ID</code> at the top of the script in index.html
+    to your OAuth Client ID from Google Cloud Console, with
+    <code>https://anjellynni.github.io</code> added as an authorized
+    JavaScript origin.
+  </div>
+</div>
+
 <div id="menu">
+  <div id="user-bar">
+    <img id="user-avatar" src="" alt="">
+    <span class="user-name" id="user-name"></span>
+    <button id="sign-out-btn">Sign out</button>
+  </div>
   <h1>Game Hub</h1>
   <p class="subtitle">Pick a game to play</p>
   <div id="grid"></div>
@@ -137,6 +221,11 @@
 </div>
 
 <script>
+  // Get this from Google Cloud Console > APIs & Services > Credentials >
+  // Create Credentials > OAuth client ID > Web application. Add
+  // https://anjellynni.github.io as an authorized JavaScript origin.
+  const GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID.apps.googleusercontent.com";
+
   // To add a new game: create its HTML file in this folder, then add
   // one entry here: { title, file, icon, description }.
   const GAMES = [
@@ -154,6 +243,8 @@
     }
   ];
 
+  const signinScreen = document.getElementById('signin-screen');
+  const signinWarning = document.getElementById('signin-config-warning');
   const grid = document.getElementById('grid');
   const empty = document.getElementById('empty');
   const menu = document.getElementById('menu');
@@ -161,24 +252,109 @@
   const frame = document.getElementById('game-frame');
   const playerTitle = document.getElementById('player-title');
   const backBtn = document.getElementById('back-btn');
+  const userAvatar = document.getElementById('user-avatar');
+  const userName = document.getElementById('user-name');
+  const signOutBtn = document.getElementById('sign-out-btn');
 
-  if (GAMES.length === 0) {
-    empty.style.display = 'block';
-  } else {
+  const CURRENT_USER_KEY = 'gamehub_current_user';
+
+  function parseJwt(token) {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+    );
+    return JSON.parse(json);
+  }
+
+  function statsKey(sub) {
+    return `gamehub_stats_${sub}`;
+  }
+
+  function getStats(sub) {
+    return JSON.parse(localStorage.getItem(statsKey(sub)) || '{}');
+  }
+
+  function recordPlay(sub, gameFile) {
+    const stats = getStats(sub);
+    const entry = stats[gameFile] || { plays: 0, lastPlayed: null };
+    entry.plays += 1;
+    entry.lastPlayed = new Date().toISOString();
+    stats[gameFile] = entry;
+    localStorage.setItem(statsKey(sub), JSON.stringify(stats));
+  }
+
+  function handleCredentialResponse(response) {
+    const payload = parseJwt(response.credential);
+    const user = {
+      sub: payload.sub,
+      name: payload.name,
+      email: payload.email,
+      picture: payload.picture
+    };
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+    showMenu(user);
+  }
+
+  function showSignIn() {
+    signinScreen.style.display = 'block';
+    menu.style.display = 'none';
+
+    if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.startsWith('YOUR_CLIENT_ID')) {
+      signinWarning.style.display = 'block';
+      return;
+    }
+
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse
+      });
+      google.accounts.id.renderButton(
+        document.getElementById('g_id_signin_container'),
+        { theme: 'outline', size: 'large', shape: 'pill' }
+      );
+      google.accounts.id.prompt();
+    } else {
+      // Google script hasn't loaded yet (e.g. slow network) — retry shortly.
+      setTimeout(showSignIn, 300);
+    }
+  }
+
+  function showMenu(user) {
+    signinScreen.style.display = 'none';
+    menu.style.display = 'block';
+    userAvatar.src = user.picture;
+    userName.textContent = user.name;
+    renderGames(user);
+  }
+
+  function renderGames(user) {
+    grid.innerHTML = '';
+    if (GAMES.length === 0) {
+      empty.style.display = 'block';
+      return;
+    }
+    const stats = getStats(user.sub);
     GAMES.forEach(game => {
+      const gameStats = stats[game.file];
+      const statsLine = gameStats
+        ? `Played ${gameStats.plays}x &middot; last ${new Date(gameStats.lastPlayed).toLocaleDateString()}`
+        : 'Not played yet';
       const card = document.createElement('div');
       card.className = 'game-card';
       card.innerHTML = `
         <div class="icon">${game.icon || "🎮"}</div>
         <h2>${game.title}</h2>
         <p>${game.description || ""}</p>
+        <div class="stats">${statsLine}</div>
       `;
-      card.addEventListener('click', () => openGame(game));
+      card.addEventListener('click', () => openGame(game, user));
       grid.appendChild(card);
     });
   }
 
-  function openGame(game) {
+  function openGame(game, user) {
+    recordPlay(user.sub, game.file);
     frame.src = game.file;
     playerTitle.textContent = game.title;
     menu.style.display = 'none';
@@ -187,11 +363,34 @@
 
   function closeGame() {
     player.classList.remove('active');
-    menu.style.display = 'block';
     frame.src = '';
+    const user = JSON.parse(localStorage.getItem(CURRENT_USER_KEY) || 'null');
+    if (user) {
+      menu.style.display = 'block';
+      renderGames(user);
+    } else {
+      showSignIn();
+    }
+  }
+
+  function signOut() {
+    localStorage.removeItem(CURRENT_USER_KEY);
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      google.accounts.id.disableAutoSelect();
+    }
+    showSignIn();
   }
 
   backBtn.addEventListener('click', closeGame);
+  signOutBtn.addEventListener('click', signOut);
+
+  // Boot: resume session if already signed in this browser, else show sign-in.
+  const savedUser = JSON.parse(localStorage.getItem(CURRENT_USER_KEY) || 'null');
+  if (savedUser) {
+    showMenu(savedUser);
+  } else {
+    showSignIn();
+  }
 </script>
 
 </body>
