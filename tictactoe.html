@@ -16,7 +16,22 @@
     color: #eee;
   }
   h1 { margin-bottom: 0.2em; }
-  #status { margin-bottom: 1em; font-size: 1.2em; }
+  #difficulty {
+    margin-bottom: 1em;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 1em;
+  }
+  #difficulty select {
+    padding: 0.3em 0.6em;
+    border-radius: 6px;
+    border: none;
+    background: #333;
+    color: #eee;
+    font-size: 1em;
+  }
+  #status { margin-bottom: 1em; font-size: 1.2em; min-height: 1.4em; }
   #board {
     display: grid;
     grid-template-columns: repeat(3, 100px);
@@ -34,6 +49,7 @@
     border-radius: 8px;
   }
   .cell:hover { background: #444; }
+  .cell.disabled { cursor: default; }
   #reset {
     margin-top: 1.2em;
     padding: 0.5em 1.2em;
@@ -49,7 +65,15 @@
 </head>
 <body>
   <h1>Tic Tac Toe</h1>
-  <div id="status">Player X's turn</div>
+  <div id="difficulty">
+    <label for="level">Bot difficulty:</label>
+    <select id="level">
+      <option value="easy">Easy</option>
+      <option value="medium" selected>Medium</option>
+      <option value="hard">Hard</option>
+    </select>
+  </div>
+  <div id="status">Your turn (X)</div>
   <div id="board"></div>
   <button id="reset">Restart</button>
 
@@ -57,6 +81,10 @@
   const boardEl = document.getElementById('board');
   const statusEl = document.getElementById('status');
   const resetBtn = document.getElementById('reset');
+  const levelEl = document.getElementById('level');
+
+  const HUMAN = 'X';
+  const BOT = 'O';
 
   let board, currentPlayer, gameOver;
 
@@ -68,9 +96,9 @@
 
   function init() {
     board = Array(9).fill('');
-    currentPlayer = 'X';
+    currentPlayer = HUMAN;
     gameOver = false;
-    statusEl.textContent = "Player X's turn";
+    statusEl.textContent = "Your turn (X)";
     render();
   }
 
@@ -78,7 +106,7 @@
     boardEl.innerHTML = '';
     board.forEach((val, i) => {
       const cell = document.createElement('div');
-      cell.className = 'cell';
+      cell.className = 'cell' + (gameOver || currentPlayer !== HUMAN ? ' disabled' : '');
       cell.textContent = val;
       cell.addEventListener('click', () => handleClick(i));
       boardEl.appendChild(cell);
@@ -86,29 +114,119 @@
   }
 
   function handleClick(i) {
-    if (gameOver || board[i] !== '') return;
-    board[i] = currentPlayer;
+    if (gameOver || currentPlayer !== HUMAN || board[i] !== '') return;
+    makeMove(i, HUMAN);
+    if (checkGameEnd()) return;
+    currentPlayer = BOT;
+    statusEl.textContent = "Bot is thinking...";
     render();
+    setTimeout(botMove, 400);
+  }
 
-    const winner = checkWinner();
+  function makeMove(i, player) {
+    board[i] = player;
+    render();
+  }
+
+  function checkGameEnd() {
+    const winner = checkWinner(board);
+    const difficultyPoints = { easy: 1, medium: 2, hard: 3 };
     if (winner) {
-      statusEl.textContent = `Player ${winner} wins!`;
+      statusEl.textContent = winner === HUMAN ? 'You win!' : 'Bot wins!';
       gameOver = true;
-      return;
+      render();
+      reportScore(winner === HUMAN ? difficultyPoints[levelEl.value] : 0);
+      return true;
     }
     if (board.every(c => c !== '')) {
       statusEl.textContent = "It's a draw!";
       gameOver = true;
-      return;
+      render();
+      reportScore(1);
+      return true;
     }
-    currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-    statusEl.textContent = `Player ${currentPlayer}'s turn`;
+    return false;
   }
 
-  function checkWinner() {
-    for (const [a,b,c] of wins) {
-      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-        return board[a];
+  function reportScore(score) {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'gh-score', score }, '*');
+    }
+  }
+
+  function botMove() {
+    if (gameOver) return;
+    const level = levelEl.value;
+    let move;
+    if (level === 'easy') {
+      move = randomMove(board);
+    } else if (level === 'medium') {
+      move = Math.random() < 0.5 ? bestMove(board) : randomMove(board);
+    } else {
+      move = bestMove(board);
+    }
+    makeMove(move, BOT);
+    if (checkGameEnd()) return;
+    currentPlayer = HUMAN;
+    statusEl.textContent = "Your turn (X)";
+    render();
+  }
+
+  function randomMove(b) {
+    const empty = b.map((v, i) => v === '' ? i : -1).filter(i => i !== -1);
+    return empty[Math.floor(Math.random() * empty.length)];
+  }
+
+  function bestMove(b) {
+    let best = -Infinity;
+    let move = null;
+    for (let i = 0; i < 9; i++) {
+      if (b[i] === '') {
+        b[i] = BOT;
+        const score = minimax(b, 0, false);
+        b[i] = '';
+        if (score > best) {
+          best = score;
+          move = i;
+        }
+      }
+    }
+    return move;
+  }
+
+  function minimax(b, depth, isMaximizing) {
+    const winner = checkWinner(b);
+    if (winner === BOT) return 10 - depth;
+    if (winner === HUMAN) return depth - 10;
+    if (b.every(c => c !== '')) return 0;
+
+    if (isMaximizing) {
+      let best = -Infinity;
+      for (let i = 0; i < 9; i++) {
+        if (b[i] === '') {
+          b[i] = BOT;
+          best = Math.max(best, minimax(b, depth + 1, false));
+          b[i] = '';
+        }
+      }
+      return best;
+    } else {
+      let best = Infinity;
+      for (let i = 0; i < 9; i++) {
+        if (b[i] === '') {
+          b[i] = HUMAN;
+          best = Math.min(best, minimax(b, depth + 1, true));
+          b[i] = '';
+        }
+      }
+      return best;
+    }
+  }
+
+  function checkWinner(b) {
+    for (const [a, c, d] of wins) {
+      if (b[a] && b[a] === b[c] && b[a] === b[d]) {
+        return b[a];
       }
     }
     return null;

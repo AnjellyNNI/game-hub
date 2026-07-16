@@ -247,6 +247,9 @@
     best = Math.max(best, score);
     finalScoreEl.textContent = score;
     finalDetailEl.textContent = `Best score this session: ${best}`;
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'gh-score', score }, '*');
+    }
   }
 
   startBtn.addEventListener('click', startGame);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Game Hub</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root {
     --bg: #1e1b2e;
@@ -23,14 +23,14 @@
     color: var(--text);
   }
 
-  /* ---- Sign-in screen ---- */
-  #signin-screen {
-    max-width: 420px;
+  /* ---- Name screen ---- */
+  #name-screen {
+    max-width: 380px;
     margin: 0 auto;
     padding: 6rem 1.5rem;
     text-align: center;
   }
-  #signin-screen h1 {
+  #name-screen h1 {
     font-size: 2.2rem;
     margin-bottom: 0.25rem;
     background: linear-gradient(90deg, var(--accent), var(--accent2));
@@ -38,24 +38,34 @@
     background-clip: text;
     color: transparent;
   }
-  #signin-screen p {
+  #name-screen p {
     color: var(--muted);
     margin-bottom: 2rem;
   }
-  #g_id_signin_container {
-    display: flex;
-    justify-content: center;
-  }
-  #signin-config-warning {
-    display: none;
-    background: var(--card);
-    border: 1px solid var(--accent);
+  #name-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
     border-radius: 10px;
-    padding: 1rem;
-    font-size: 0.85rem;
-    color: var(--muted);
-    text-align: left;
+    border: 2px solid #453f66;
+    background: #201c33;
+    color: var(--text);
+    outline: none;
+    margin-bottom: 1rem;
   }
+  #name-input:focus { border-color: var(--accent); }
+  #name-continue {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+  }
+  #name-continue:hover { background: #6a4be0; }
 
   /* ---- Menu screen ---- */
   #menu {
@@ -70,17 +80,10 @@
     gap: 0.75rem;
     justify-content: flex-end;
     margin-bottom: 1.5rem;
-  }
-  #user-bar img {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-  }
-  #user-bar .user-name {
     font-size: 0.9rem;
     color: var(--muted);
   }
-  #sign-out-btn {
+  #change-name-btn {
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--muted);
@@ -89,7 +92,7 @@
     font-size: 0.8rem;
     cursor: pointer;
   }
-  #sign-out-btn:hover { color: var(--text); border-color: var(--text); }
+  #change-name-btn:hover { color: var(--text); border-color: var(--text); }
   #menu h1 {
     text-align: center;
     font-size: 2.2rem;
@@ -107,7 +110,7 @@
   }
   #grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 1.25rem;
   }
   .game-card {
@@ -115,15 +118,10 @@
     border-radius: 16px;
     padding: 1.75rem 1.25rem;
     text-align: center;
-    cursor: pointer;
     border: 1px solid transparent;
-    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    transition: border-color 0.15s ease;
   }
-  .game-card:hover {
-    background: var(--card-hover);
-    border-color: var(--accent);
-    transform: translateY(-4px);
-  }
+  .game-card:hover { border-color: var(--accent); }
   .game-card .icon {
     font-size: 2.75rem;
     margin-bottom: 0.75rem;
@@ -135,12 +133,38 @@
   .game-card p {
     font-size: 0.9rem;
     color: var(--muted);
-    margin: 0 0 0.5rem;
+    margin: 0 0 0.9rem;
   }
-  .game-card .stats {
-    font-size: 0.75rem;
+  .play-btn {
+    width: 100%;
+    padding: 0.6rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    margin-bottom: 0.9rem;
+  }
+  .play-btn:hover { background: #6a4be0; }
+  .leaderboard {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--muted);
+    border-top: 1px solid #453f66;
+    padding-top: 0.6rem;
+  }
+  .leaderboard .lb-title {
+    font-weight: 600;
     color: var(--accent2);
+    margin-bottom: 0.3rem;
   }
+  .leaderboard ol {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+  .leaderboard li { margin-bottom: 0.15rem; }
   #empty {
     text-align: center;
     color: var(--muted);
@@ -178,6 +202,11 @@
   #player-title {
     font-weight: 600;
   }
+  #score-toast {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--accent2);
+  }
   #game-frame {
     flex: 1;
     border: none;
@@ -187,24 +216,17 @@
 </head>
 <body>
 
-<div id="signin-screen">
+<div id="name-screen">
   <h1>Game Hub</h1>
-  <p>Sign in with Google to play</p>
-  <div id="g_id_signin_container"></div>
-  <div id="signin-config-warning">
-    <strong>Google sign-in isn't configured yet.</strong><br>
-    Set <code>GOOGLE_CLIENT_ID</code> at the top of the script in index.html
-    to your OAuth Client ID from Google Cloud Console, with
-    <code>https://anjellynni.github.io</code> added as an authorized
-    JavaScript origin.
-  </div>
+  <p>Enter a name to save your scores</p>
+  <input id="name-input" type="text" maxlength="24" placeholder="Your name">
+  <button id="name-continue">Continue</button>
 </div>
 
 <div id="menu">
   <div id="user-bar">
-    <img id="user-avatar" src="" alt="">
-    <span class="user-name" id="user-name"></span>
-    <button id="sign-out-btn">Sign out</button>
+    <span id="user-name"></span>
+    <button id="change-name-btn">Change name</button>
   </div>
   <h1>Game Hub</h1>
   <p class="subtitle">Pick a game to play</p>
@@ -216,15 +238,15 @@
   <div id="player-bar">
     <button id="back-btn">&larr; Back to Games</button>
     <span id="player-title"></span>
+    <span id="score-toast"></span>
   </div>
   <iframe id="game-frame"></iframe>
 </div>
 
 <script>
-  // Get this from Google Cloud Console > APIs & Services > Credentials >
-  // Create Credentials > OAuth client ID > Web application. Add
-  // https://anjellynni.github.io as an authorized JavaScript origin.
-  const GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID.apps.googleusercontent.com";
+  const SUPABASE_URL = "https://ygocgmbukezodqejktms.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_g36PXkjAI7bfvjOTczpghQ_VyLLgH3L";
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   // To add a new game: create its HTML file in this folder, then add
   // one entry here: { title, file, icon, description }.
@@ -240,123 +262,115 @@
       file: "tictactoe.html",
       icon: "⭕",
       description: "Classic two-player grid game"
+    },
+    {
+      title: "Tetris",
+      file: "tetris.html",
+      icon: "🧱",
+      description: "Stack blocks with easy, medium & hard modes"
     }
   ];
 
-  const signinScreen = document.getElementById('signin-screen');
-  const signinWarning = document.getElementById('signin-config-warning');
+  const NAME_KEY = 'gamehub_username';
+
+  const nameScreen = document.getElementById('name-screen');
+  const nameInput = document.getElementById('name-input');
+  const nameContinue = document.getElementById('name-continue');
+  const menu = document.getElementById('menu');
   const grid = document.getElementById('grid');
   const empty = document.getElementById('empty');
-  const menu = document.getElementById('menu');
+  const userNameEl = document.getElementById('user-name');
+  const changeNameBtn = document.getElementById('change-name-btn');
   const player = document.getElementById('player');
   const frame = document.getElementById('game-frame');
   const playerTitle = document.getElementById('player-title');
+  const scoreToast = document.getElementById('score-toast');
   const backBtn = document.getElementById('back-btn');
-  const userAvatar = document.getElementById('user-avatar');
-  const userName = document.getElementById('user-name');
-  const signOutBtn = document.getElementById('sign-out-btn');
 
-  const CURRENT_USER_KEY = 'gamehub_current_user';
+  let currentGame = null;
 
-  function parseJwt(token) {
-    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const json = decodeURIComponent(
-      atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
-    );
-    return JSON.parse(json);
+  function getUsername() {
+    return localStorage.getItem(NAME_KEY);
   }
 
-  function statsKey(sub) {
-    return `gamehub_stats_${sub}`;
+  function setUsername(name) {
+    localStorage.setItem(NAME_KEY, name);
   }
 
-  function getStats(sub) {
-    return JSON.parse(localStorage.getItem(statsKey(sub)) || '{}');
-  }
-
-  function recordPlay(sub, gameFile) {
-    const stats = getStats(sub);
-    const entry = stats[gameFile] || { plays: 0, lastPlayed: null };
-    entry.plays += 1;
-    entry.lastPlayed = new Date().toISOString();
-    stats[gameFile] = entry;
-    localStorage.setItem(statsKey(sub), JSON.stringify(stats));
-  }
-
-  function handleCredentialResponse(response) {
-    const payload = parseJwt(response.credential);
-    const user = {
-      sub: payload.sub,
-      name: payload.name,
-      email: payload.email,
-      picture: payload.picture
-    };
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-    showMenu(user);
-  }
-
-  function showSignIn() {
-    signinScreen.style.display = 'block';
+  function showNameScreen() {
+    nameScreen.style.display = 'block';
     menu.style.display = 'none';
-
-    if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.startsWith('YOUR_CLIENT_ID')) {
-      signinWarning.style.display = 'block';
-      return;
-    }
-
-    if (window.google && window.google.accounts && window.google.accounts.id) {
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse
-      });
-      google.accounts.id.renderButton(
-        document.getElementById('g_id_signin_container'),
-        { theme: 'outline', size: 'large', shape: 'pill' }
-      );
-      google.accounts.id.prompt();
-    } else {
-      // Google script hasn't loaded yet (e.g. slow network) — retry shortly.
-      setTimeout(showSignIn, 300);
-    }
+    nameInput.value = getUsername() || '';
+    nameInput.focus();
   }
 
-  function showMenu(user) {
-    signinScreen.style.display = 'none';
+  function showMenu() {
+    nameScreen.style.display = 'none';
     menu.style.display = 'block';
-    userAvatar.src = user.picture;
-    userName.textContent = user.name;
-    renderGames(user);
+    userNameEl.textContent = getUsername();
+    renderGames();
   }
 
-  function renderGames(user) {
+  function renderGames() {
     grid.innerHTML = '';
     if (GAMES.length === 0) {
       empty.style.display = 'block';
       return;
     }
-    const stats = getStats(user.sub);
     GAMES.forEach(game => {
-      const gameStats = stats[game.file];
-      const statsLine = gameStats
-        ? `Played ${gameStats.plays}x &middot; last ${new Date(gameStats.lastPlayed).toLocaleDateString()}`
-        : 'Not played yet';
       const card = document.createElement('div');
       card.className = 'game-card';
       card.innerHTML = `
         <div class="icon">${game.icon || "🎮"}</div>
         <h2>${game.title}</h2>
         <p>${game.description || ""}</p>
-        <div class="stats">${statsLine}</div>
+        <button class="play-btn">Play</button>
+        <div class="leaderboard">
+          <div class="lb-title">Top Scores</div>
+          <ol class="lb-list"><li>Loading...</li></ol>
+        </div>
       `;
-      card.addEventListener('click', () => openGame(game, user));
+      card.querySelector('.play-btn').addEventListener('click', () => openGame(game));
       grid.appendChild(card);
+      loadLeaderboard(game.file, card.querySelector('.lb-list'));
     });
   }
 
-  function openGame(game, user) {
-    recordPlay(user.sub, game.file);
+  async function loadLeaderboard(gameFile, listEl) {
+    const { data, error } = await db
+      .from('scores')
+      .select('username, score')
+      .eq('game', gameFile)
+      .order('score', { ascending: false })
+      .limit(5);
+
+    if (error) {
+      listEl.innerHTML = '<li>Couldn\'t load scores</li>';
+      return;
+    }
+    if (!data || data.length === 0) {
+      listEl.innerHTML = '<li>No scores yet — be the first!</li>';
+      return;
+    }
+    listEl.innerHTML = data.map(row => `<li>${escapeHtml(row.username)} — ${row.score}</li>`).join('');
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function submitScore(gameFile, score) {
+    const username = getUsername();
+    await db.from('scores').insert({ username, game: gameFile, score });
+  }
+
+  function openGame(game) {
+    currentGame = game;
     frame.src = game.file;
     playerTitle.textContent = game.title;
+    scoreToast.textContent = '';
     menu.style.display = 'none';
     player.classList.add('active');
   }
@@ -364,32 +378,35 @@
   function closeGame() {
     player.classList.remove('active');
     frame.src = '';
-    const user = JSON.parse(localStorage.getItem(CURRENT_USER_KEY) || 'null');
-    if (user) {
-      menu.style.display = 'block';
-      renderGames(user);
-    } else {
-      showSignIn();
-    }
+    currentGame = null;
+    showMenu();
   }
 
-  function signOut() {
-    localStorage.removeItem(CURRENT_USER_KEY);
-    if (window.google && window.google.accounts && window.google.accounts.id) {
-      google.accounts.id.disableAutoSelect();
-    }
-    showSignIn();
-  }
+  window.addEventListener('message', async (event) => {
+    if (!event.data || event.data.type !== 'gh-score' || !currentGame) return;
+    scoreToast.textContent = `Score submitted: ${event.data.score}`;
+    await submitScore(currentGame.file, event.data.score);
+  });
 
+  nameContinue.addEventListener('click', () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      nameInput.focus();
+      return;
+    }
+    setUsername(name);
+    showMenu();
+  });
+  nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') nameContinue.click();
+  });
+  changeNameBtn.addEventListener('click', showNameScreen);
   backBtn.addEventListener('click', closeGame);
-  signOutBtn.addEventListener('click', signOut);
 
-  // Boot: resume session if already signed in this browser, else show sign-in.
-  const savedUser = JSON.parse(localStorage.getItem(CURRENT_USER_KEY) || 'null');
-  if (savedUser) {
-    showMenu(savedUser);
+  if (getUsername()) {
+    showMenu();
   } else {
-    showSignIn();
+    showNameScreen();
   }
 </script>
 
